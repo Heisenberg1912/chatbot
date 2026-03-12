@@ -1,0 +1,755 @@
+'use client';
+
+import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Send,
+  ImagePlus,
+  Menu,
+  X,
+  Plus,
+  Building2,
+  LayoutGrid,
+  Map,
+  Package,
+  MessageSquare,
+  Loader2,
+  User,
+  ChevronDown,
+  LogIn,
+  LogOut,
+  Trash2,
+  Sparkles,
+  History,
+  Sun,
+  Moon
+} from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
+import FloorPlanViewer from './components/FloorPlanViewer';
+import AuthModal from './components/AuthModal';
+import UpgradeModal from './components/UpgradeModal';
+import ChatMarkdown from './components/ChatMarkdown';
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  module?: string;
+  metadata?: Record<string, unknown>;
+  image?: string;
+  timestamp: Date;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  module: string;
+  messages: Message[];
+  createdAt: Date;
+}
+
+const MODULES = [
+  { id: 'general', name: 'General Assistant', icon: Sparkles, color: '#e4e4e7', description: 'Ask anything about construction & real estate' },
+  { id: 'site-analyzer', name: 'Site Analyzer', icon: Building2, color: '#d4d4d8', description: 'Upload construction images for valuation & analysis' },
+  { id: 'floorplan', name: 'Floor Plans', icon: LayoutGrid, color: '#a1a1aa', description: 'Generate 2D floor plans from descriptions' },
+  { id: 'masterplan', name: 'Masterplan Explorer', icon: Map, color: '#71717a', description: 'Analyze city masterplans & discover leads' },
+  { id: 'materials', name: 'Material Finder', icon: Package, color: '#e4e4e7', description: 'Find suppliers & get material recommendations' },
+];
+
+const QUICK_ACTIONS = [
+  { label: 'Analyze a construction site from an image', module: 'site-analyzer', prompt: '' },
+  { label: 'Generate a modern 3BHK floor plan layout', module: 'floorplan', prompt: 'Generate a modern 3BHK apartment floor plan with 1200 sq ft, 2 bathrooms, open kitchen, and a balcony' },
+  { label: 'Discover real estate hotspots in Mumbai', module: 'masterplan', prompt: 'Analyze Mumbai real estate market and show me development hotspots' },
+  { label: 'Find premium cement suppliers in Delhi', module: 'materials', prompt: 'Find structural material suppliers in Delhi, specifically for cement and steel' },
+];
+
+export default function Home() {
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedModule, setSelectedModule] = useState('general');
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [user, setUser] = useState<{
+    name: string;
+    email: string;
+    subscription?: { plan: string; status: string };
+  } | null>(null);
+  const [usageInfo, setUsageInfo] = useState<{ freeUsed: number; freeLimit: number; remaining: number; paid: boolean } | null>(null);
+  const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const messages = activeSession?.messages || [];
+
+  useEffect(() => {
+    setIsDarkMode(document.documentElement.classList.contains('dark'));
+  }, []);
+
+  const toggleTheme = () => {
+    const isDark = document.documentElement.classList.toggle('dark');
+    setIsDarkMode(isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.user) setUser(data.user);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch usage info for current module
+  const fetchUsage = useCallback(() => {
+    const key = user?.email || activeSessionId || '';
+    if (!key && !user) return;
+    fetch(`/api/usage?module=${selectedModule}${!user ? `&key=${key}` : ''}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setUsageInfo(data);
+      })
+      .catch(() => {});
+  }, [user, selectedModule, activeSessionId]);
+
+  useEffect(() => {
+    fetchUsage();
+  }, [fetchUsage]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 160)}px`;
+    }
+  }, [input]);
+
+  const createNewSession = useCallback(
+    (module?: string) => {
+      const id = uuidv4();
+      const mod = module || selectedModule;
+      const modInfo = MODULES.find((m) => m.id === mod);
+      const newSession: ChatSession = {
+        id,
+        title: `New ${modInfo?.name || 'Chat'}`,
+        module: mod,
+        messages: [],
+        createdAt: new Date(),
+      };
+      setSessions((prev) => [newSession, ...prev]);
+      setActiveSessionId(id);
+      if (module) setSelectedModule(module);
+      return id;
+    },
+    [selectedModule]
+  );
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImageMimeType(file.type);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setImagePreview(result);
+      setImageBase64(result.split(',')[1]);
+      setSelectedModule('site-analyzer');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImagePreview(null);
+    setImageBase64(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const sendMessage = async (overrideMessage?: string, overrideModule?: string) => {
+    const msg = overrideMessage || input.trim();
+    if (!msg && !imageBase64) return;
+    if (isLoading) return;
+
+    let sessionId = activeSessionId;
+    if (!sessionId) {
+      sessionId = createNewSession(overrideModule);
+    }
+
+    const userMessage: Message = {
+      id: uuidv4(),
+      role: 'user',
+      content: msg || 'Analyze this image',
+      module: overrideModule || selectedModule,
+      image: imagePreview || undefined,
+      timestamp: new Date(),
+    };
+
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              messages: [...s.messages, userMessage],
+              title: s.messages.length === 0 ? msg.slice(0, 40) || 'Image Analysis' : s.title,
+            }
+          : s
+      )
+    );
+
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          sessionId,
+          module: overrideModule || selectedModule,
+          image: imageBase64 || undefined,
+          imageMimeType: imageBase64 ? imageMimeType : undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      // Handle limit reached
+      if (data.limitReached) {
+        const limitMessage: Message = {
+          id: uuidv4(),
+          role: 'assistant',
+          content: data.error,
+          module: data.module,
+          metadata: { type: 'limit-reached' },
+          timestamp: new Date(),
+        };
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sessionId
+              ? { ...s, messages: [...s.messages, limitMessage] }
+              : s
+          )
+        );
+        fetchUsage();
+        return;
+      }
+
+      const assistantMessage: Message = {
+        id: uuidv4(),
+        role: 'assistant',
+        content: data.response || data.error || 'Something went wrong.',
+        module: data.module,
+        metadata: data.metadata,
+        timestamp: new Date(),
+      };
+
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? { ...s, messages: [...s.messages, assistantMessage] }
+            : s
+        )
+      );
+
+      if (data.module) setSelectedModule(data.module);
+      fetchUsage();
+    } catch {
+      const errorMessage: Message = {
+        id: uuidv4(),
+        role: 'assistant',
+        content: 'Sorry, something went wrong. Please try again.',
+        timestamp: new Date(),
+      };
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === sessionId
+            ? { ...s, messages: [...s.messages, errorMessage] }
+            : s
+        )
+      );
+    } finally {
+      setIsLoading(false);
+      clearImage();
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const deleteSession = (id: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== id));
+    if (activeSessionId === id) {
+      setActiveSessionId('');
+    }
+  };
+
+  const handleAuth = async (action: 'login' | 'register', data: Record<string, string>) => {
+    const res = await fetch(`/api/auth/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (result.user) {
+      setUser(result.user);
+      setShowAuthModal(false);
+    }
+    return result;
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  };
+
+  const currentModule = MODULES.find((m) => m.id === selectedModule)!;
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-white dark:bg-surface text-gray-900 dark:text-content font-sans selection:bg-gray-200 dark:selection:bg-white/20 selection:text-black dark:selection:text-white transition-colors duration-300">
+      {/* Sidebar */}
+      <aside
+        className={`${
+          sidebarOpen ? 'w-72' : 'w-0'
+        } transition-all duration-300 bg-gray-50 dark:bg-surface-light border-r border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0 z-30 relative`}
+      >
+        <div className="p-4 pt-4">
+          <button
+            onClick={() => createNewSession()}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-full bg-white dark:bg-surface-lighter hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-sm font-medium text-gray-900 dark:text-content group border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none"
+          >
+            <Plus size={18} className="text-gray-500 dark:text-content-muted group-hover:text-gray-900 dark:group-hover:text-white transition-colors" />
+            <span>New chat</span>
+          </button>
+        </div>
+
+        {/* Modules */}
+        <div className="px-4 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2">Capabilities</p>
+          <div className="space-y-1">
+            {MODULES.map((mod) => (
+              <button
+                key={mod.id}
+                onClick={() => setSelectedModule(mod.id)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                  selectedModule === mod.id
+                    ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
+                    : 'text-gray-600 dark:text-content-muted hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-content'
+                }`}
+              >
+                <mod.icon size={16} />
+                {mod.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Chat History */}
+        <div className="flex-1 overflow-y-auto px-4 py-4 mt-2 border-t border-gray-200 dark:border-white/5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2 flex items-center gap-2">
+            <History size={12} /> Recent
+          </p>
+          <div className="space-y-1">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                className={`group flex items-center gap-2 px-3 py-2 rounded-xl text-sm cursor-pointer transition-all ${
+                  activeSessionId === session.id
+                    ? 'bg-gray-200 dark:bg-white/5 text-gray-900 dark:text-content font-medium'
+                    : 'text-gray-600 dark:text-content-muted hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-content'
+                }`}
+                onClick={() => setActiveSessionId(session.id)}
+              >
+                <MessageSquare size={14} className="shrink-0 opacity-70" />
+                <span className="truncate flex-1">{session.title}</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSession(session.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 hover:text-red-500 dark:hover:text-red-400 transition-opacity p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            {sessions.length === 0 && (
+              <div className="px-2 text-xs text-gray-400 dark:text-content-subtle italic">No recent chats</div>
+            )}
+          </div>
+        </div>
+
+        {/* User Profile */}
+        <div className="p-4 mt-auto border-t border-gray-200 dark:border-white/5">
+          {user ? (
+            <div className="space-y-3 px-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-surface-lighter flex items-center justify-center text-sm font-semibold text-gray-900 dark:text-white shadow-sm border border-gray-300 dark:border-white/10">
+                    {user.name[0].toUpperCase()}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900 dark:text-content truncate max-w-[120px]">{user.name}</span>
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className={`text-[11px] font-semibold px-1.5 py-0.5 rounded w-fit mt-0.5 transition-colors ${
+                        user.subscription?.plan === 'pro' || user.subscription?.plan === 'enterprise'
+                          ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                          : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-content-muted hover:bg-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      {(user.subscription?.plan || 'free').toUpperCase()}
+                    </button>
+                  </div>
+                </div>
+                <button onClick={handleLogout} className="text-gray-500 dark:text-content-muted hover:text-gray-900 dark:hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5">
+                  <LogOut size={16} />
+                </button>
+              </div>
+              {/* Usage indicator for free users */}
+              {usageInfo && !usageInfo.paid && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-gray-500 dark:text-content-muted">{currentModule.name}</span>
+                    <span className="text-gray-500 dark:text-content-muted">{usageInfo.freeUsed}/{usageInfo.freeLimit}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        usageInfo.freeUsed >= usageInfo.freeLimit
+                          ? 'bg-red-500'
+                          : usageInfo.freeUsed >= usageInfo.freeLimit - 1
+                          ? 'bg-amber-500'
+                          : 'bg-gray-400 dark:bg-white/30'
+                      }`}
+                      style={{ width: `${Math.min(100, (usageInfo.freeUsed / usageInfo.freeLimit) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-900 dark:text-white transition-colors text-sm font-medium"
+            >
+              <LogIn size={16} />
+              Sign in
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        {/* Subtle background glow */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-[500px] bg-brand-glow-light dark:bg-brand-glow pointer-events-none opacity-40 dark:opacity-60 z-0 mix-blend-screen transition-opacity duration-300" />
+        
+        {/* Header */}
+        <header className="h-16 flex items-center justify-between px-4 gap-3 shrink-0 relative z-20 border-b border-transparent">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-2 text-gray-500 dark:text-content-muted hover:text-gray-900 dark:hover:text-white transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-white/5"
+            >
+              {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
+            <div className="font-semibold text-xl tracking-tight flex items-center gap-2 select-none">
+              <span className="text-gradient-brand">BuildBot</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 relative">
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-gray-500 dark:text-content-muted hover:text-gray-900 dark:hover:text-white transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-white/5 mr-1"
+              aria-label="Toggle dark mode"
+            >
+              {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
+            <button
+              onClick={() => setModuleMenuOpen(!moduleMenuOpen)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors text-sm font-medium text-gray-900 dark:text-content"
+            >
+              <span>{currentModule.name}</span>
+              <ChevronDown size={14} className="text-gray-500 dark:text-content-muted" />
+            </button>
+            
+            {moduleMenuOpen && (
+              <div className="absolute top-full right-0 mt-2 w-72 bg-white dark:bg-surface-lighter border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl dark:shadow-2xl z-50 py-2 animate-fade-in backdrop-blur-xl">
+                {MODULES.map((mod) => (
+                  <button
+                    key={mod.id}
+                    onClick={() => {
+                      setSelectedModule(mod.id);
+                      setModuleMenuOpen(false);
+                    }}
+                    className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 text-left transition-colors"
+                  >
+                    <div className="mt-0.5 p-1.5 rounded-lg bg-gray-50 dark:bg-surface border border-gray-200 dark:border-white/5">
+                      <mod.icon size={16} className="text-gray-600 dark:text-white" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">{mod.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-content-muted mt-0.5 leading-snug">{mod.description}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto relative z-10 scroll-smooth pb-4">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[80%] px-4 pt-10 pb-8">
+              <div className="mb-12 text-center animate-slide-up">
+                <h1 className="text-4xl md:text-5xl font-medium tracking-tight mb-3">
+                  <span className="text-gradient-brand">Hello, {user ? user.name.split(' ')[0] : 'there'}</span>
+                </h1>
+                <h2 className="text-2xl md:text-3xl text-gray-500 dark:text-content-muted font-normal tracking-wide">
+                  How can I help you today?
+                </h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-3xl w-full px-4 animate-slide-up-stagger" style={{ animationDelay: '100ms' }}>
+                {QUICK_ACTIONS.map((action, i) => {
+                  const mod = MODULES.find((m) => m.id === action.module)!;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (action.prompt) {
+                          setSelectedModule(action.module);
+                          setInput(action.prompt);
+                          setTimeout(() => sendMessage(action.prompt, action.module), 150);
+                        } else {
+                          setSelectedModule(action.module);
+                          fileInputRef.current?.click();
+                        }
+                      }}
+                      className="flex flex-col gap-3 p-4 rounded-2xl bg-gray-50 dark:bg-surface-lighter border border-gray-200 dark:border-white/5 hover:bg-gray-100 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/10 transition-all text-left group shadow-sm dark:shadow-none"
+                    >
+                      <div className="flex items-center gap-2 text-[14px] font-medium text-gray-600 dark:text-content-muted group-hover:text-gray-900 dark:group-hover:text-content transition-colors">
+                        <mod.icon size={16} />
+                        <span>
+                          {action.label}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto py-6 px-4 space-y-8">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex gap-4 animate-slide-up ${
+                    msg.role === 'user' ? 'flex-row-reverse' : ''
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm ${
+                      msg.role === 'user'
+                        ? 'bg-gray-100 dark:bg-surface-lighter text-gray-900 dark:text-content border border-gray-200 dark:border-white/10'
+                        : 'bg-gray-900 dark:bg-white text-white dark:text-surface'
+                    }`}
+                  >
+                    {msg.role === 'user' ? (
+                      user ? <span className="text-xs font-semibold">{user.name[0].toUpperCase()}</span> : <User size={16} />
+                    ) : (
+                      <Sparkles size={16} className="text-white dark:text-surface fill-white/20 dark:fill-surface" />
+                    )}
+                  </div>
+                  
+                  {/* Message Content */}
+                  <div className={`flex-1 ${msg.role === 'user' ? 'text-right' : ''}`}>
+                    <div
+                      className={`inline-block max-w-[90%] text-left ${
+                        msg.role === 'user'
+                          ? 'bg-gray-100 dark:bg-surface-lighter px-5 py-3.5 rounded-3xl rounded-tr-sm text-gray-900 dark:text-content border border-gray-200 dark:border-white/5 shadow-sm dark:shadow-none'
+                          : 'pt-1.5 text-gray-900 dark:text-content'
+                      }`}
+                    >
+                      {msg.image && (
+                        <div className="mb-4 rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10 inline-block shadow-sm">
+                          <img
+                            src={msg.image}
+                            alt="Uploaded"
+                            className="max-w-xs object-cover"
+                          />
+                        </div>
+                      )}
+                      
+                      {msg.role === 'assistant' && msg.metadata?.type === 'limit-reached' ? (
+                        <div className="space-y-3">
+                          <p className="text-sm text-gray-600 dark:text-content-muted">{msg.content}</p>
+                          <button
+                            onClick={() => setShowUpgradeModal(true)}
+                            className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition-colors shadow-sm"
+                          >
+                            Upgrade to Pro
+                          </button>
+                        </div>
+                      ) : msg.role === 'assistant' ? (
+                        <ChatMarkdown content={msg.content} />
+                      ) : (
+                        <div className="text-[15px] leading-relaxed">
+                          {msg.content}
+                        </div>
+                      )}
+                      
+                      {/* Interactive components like Floorplan */}
+                      {msg.metadata?.type === 'floorplan' && (
+                        <div className="mt-5 rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10 shadow-lg bg-gray-50 dark:bg-surface-lighter">
+                          <FloorPlanViewer plan={msg.metadata.data as Record<string, unknown>} />
+                        </div>
+                      )}
+                      
+                      {/* Module tag */}
+                      {msg.role === 'assistant' && msg.module && msg.module !== 'general' && (
+                        <div className="mt-4 flex items-center gap-1">
+                          <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-gray-100 dark:bg-surface-lighter text-gray-600 dark:text-content-muted flex items-center gap-1.5 border border-gray-200 dark:border-white/5">
+                            {MODULES.find((m) => m.id === msg.module)?.icon && (() => {
+                               const Icon = MODULES.find((m) => m.id === msg.module)!.icon;
+                               return <Icon size={12} />;
+                            })()}
+                            {MODULES.find((m) => m.id === msg.module)?.name || msg.module}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              {/* Loading Indicator */}
+              {isLoading && (
+                <div className="flex gap-4 animate-slide-up">
+                  <div className="w-8 h-8 rounded-full bg-gray-900 dark:bg-white text-white dark:text-surface flex items-center justify-center shrink-0 mt-1 shadow-sm animate-pulse-slow">
+                    <Sparkles size={16} className="text-white dark:text-surface fill-white/20 dark:fill-surface" />
+                  </div>
+                  <div className="pt-3 px-2">
+                    <div className="flex gap-1.5 items-center h-6">
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                      <span className="typing-dot" />
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div ref={messagesEndRef} className="h-4" />
+            </div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="relative z-20 pb-6 px-4 pt-2 w-full max-w-3xl mx-auto">
+          {/* Image Preview inside input area top */}
+          {imagePreview && (
+            <div className="absolute -top-16 left-8 bg-white dark:bg-surface-lighter p-1.5 rounded-xl border border-gray-200 dark:border-white/10 shadow-2xl animate-fade-in z-30">
+              <div className="relative">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="h-16 rounded-lg object-cover"
+                />
+                <button
+                  onClick={clearImage}
+                  className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white dark:bg-surface border border-gray-200 dark:border-white/10 text-gray-500 dark:text-content-muted hover:text-white dark:hover:text-white hover:bg-red-500 dark:hover:bg-red-500 hover:border-red-500 flex items-center justify-center transition-colors shadow-sm"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="relative group bg-gray-50 dark:bg-surface-lighter rounded-[28px] shadow-sm transition-all duration-300 flex flex-col overflow-hidden border border-gray-200 dark:border-white/10 focus-within:border-gray-300 dark:focus-within:border-white/20 focus-within:bg-white dark:focus-within:bg-[#1c1c1e]">
+            <div className="flex items-end gap-2 p-1.5 px-2 relative z-10">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                accept="image/*"
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 text-gray-500 dark:text-content-muted hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-white/5 transition-colors rounded-full shrink-0 mb-0.5"
+                title="Upload an image"
+              >
+                <ImagePlus size={22} />
+              </button>
+              
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  selectedModule === 'site-analyzer'
+                    ? 'Upload an image or describe the site'
+                    : selectedModule === 'floorplan'
+                    ? 'Describe the floor plan you need'
+                    : selectedModule === 'masterplan'
+                    ? 'Which city masterplan should we explore?'
+                    : selectedModule === 'materials'
+                    ? 'What materials are you looking for?'
+                    : 'Ask anything...'
+                }
+                rows={1}
+                className="flex-1 bg-transparent border-none outline-none resize-none py-3.5 text-[15px] max-h-[200px] text-gray-900 dark:text-content placeholder:text-gray-500 dark:placeholder:text-content-muted font-normal"
+                style={{ minHeight: '52px' }}
+              />
+              
+              <button
+                onClick={() => sendMessage()}
+                disabled={isLoading || (!input.trim() && !imageBase64)}
+                className="p-3 mb-0.5 rounded-full bg-gray-900 dark:bg-white text-white dark:text-surface hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-gray-900 dark:disabled:hover:bg-white transition-all shrink-0 shadow-sm"
+              >
+                {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
+              </button>
+            </div>
+          </div>
+          <div className="text-center mt-3">
+            <span className="text-[11px] text-gray-500 dark:text-content-subtle font-medium tracking-wide">
+              Built on intelligence. Verify critical outputs.
+            </span>
+          </div>
+        </div>
+      </main>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <AuthModal onClose={() => setShowAuthModal(false)} onAuth={handleAuth} />
+      )}
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+      )}
+    </div>
+  );
+}
