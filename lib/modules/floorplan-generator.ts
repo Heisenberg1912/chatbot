@@ -644,8 +644,8 @@ export async function generateFloorPlan(description: string): Promise<FloorPlan>
   // Calculate total area
   const totalArea = rooms.reduce((sum, r) => sum + r.area, 0);
 
-  // Generate AI image of the floor plan
-  const floorPlanImage = await generateFloorPlanImage(description, rooms);
+  // Skip AI image generation to stay within Vercel free tier timeout (60s)
+  // The frontend renders the floor plan from room/wall/door/window data instead
 
   return {
     title: `Floor Plan: ${description.slice(0, 50)}`,
@@ -657,7 +657,6 @@ export async function generateFloorPlan(description: string): Promise<FloorPlan>
     summary: `Generated ${rooms.length} rooms with ${doors.length} doors and ${windows.length} windows.`,
     materials: [...new Set(rooms.map(r => `${r.name}: ${r.materials.floor} floor, ${r.materials.wall} walls`))],
     estimatedCost: `Estimated based on ${totalArea} sq ft`,
-    floorPlanImage,
   };
 }
 

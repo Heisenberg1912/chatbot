@@ -13,12 +13,21 @@ const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-preview-
 
 const MODELS = [TEXT_MODEL];
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Request timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 async function tryWithFallback(
   fn: (modelName: string) => Promise<string>
 ): Promise<string> {
   for (const modelName of MODELS) {
     try {
-      return await fn(modelName);
+      return await withTimeout(fn(modelName), 45000); // 45s timeout to stay within Vercel 60s limit
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`Model ${modelName} failed: ${message}`);
