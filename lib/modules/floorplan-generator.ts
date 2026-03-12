@@ -1,4 +1,4 @@
-import { generateText, generateImage } from '../gemini';
+import { generateImage, generateVisionContent } from '../gemini';
 
 const SYSTEM_INSTRUCTION = `You are VitruviAI, an expert AI architect specializing in generating detailed 2D floor plans.
 When given a building description, you produce accurate architectural layouts with:
@@ -586,23 +586,10 @@ function extractRoomsFromResponse(text: string): Room[] {
   return rooms;
 }
 
-// ─── Main Generator ──────────────────────────────────────────────────────────
+// ─── Main Generator (Image-Only) ─────────────────────────────────────────────
 
-// ─── AI Image Generation for Floor Plan ──────────────────────────────────────
-
-async function generateFloorPlanImage(description: string, rooms: Room[]): Promise<string | undefined> {
-  try {
-    const roomDescriptions = rooms.map(r => {
-      const xs = r.points.map(p => p.x);
-      const ys = r.points.map(p => p.y);
-      const w = Math.round((Math.max(...xs) - Math.min(...xs)) / 12);
-      const h = Math.round((Math.max(...ys) - Math.min(...ys)) / 12);
-      return `${r.name}: ${w}ft x ${h}ft (${r.area} sq ft)`;
-    }).join(', ');
-
-    const imagePrompt = `Generate a professional 2D architectural floor plan image for: "${description}"
-
-The floor plan should include these rooms: ${roomDescriptions}
+export async function generateFloorPlan(description: string): Promise<FloorPlan> {
+  const imagePrompt = `Generate a professional 2D architectural floor plan image for: "${description}"
 
 Requirements:
 - Professional architectural drawing style with clean lines
@@ -618,45 +605,20 @@ Requirements:
 - Professional architectural quality, no 3D elements
 - Rooms should be properly adjacent with shared walls, no gaps between rooms`;
 
-    const { imageBase64, mimeType } = await generateImage(imagePrompt);
-    return `data:${mimeType};base64,${imageBase64}`;
-  } catch (err) {
-    console.warn('Floor plan image generation failed:', err instanceof Error ? err.message : err);
-    return undefined;
-  }
-}
-
-export async function generateFloorPlan(description: string): Promise<FloorPlan> {
-  const prompt = buildFloorPlanPrompt(description);
-  const text = await generateText(prompt, SYSTEM_INSTRUCTION);
-
-  const rooms = extractRoomsFromResponse(text);
-
-  if (rooms.length === 0) {
-    throw new Error('No valid rooms generated. Please try a different description.');
-  }
-
-  // Generate walls, doors, windows algorithmically (VitruviAI approach)
-  const walls = generateWalls(rooms);
-  const doors = generateDoors(rooms);
-  const windows = generateWindows(rooms);
-
-  // Calculate total area
-  const totalArea = rooms.reduce((sum, r) => sum + r.area, 0);
-
-  // Skip AI image generation to stay within Vercel free tier timeout (60s)
-  // The frontend renders the floor plan from room/wall/door/window data instead
+  const { imageBase64, mimeType } = await generateImage(imagePrompt);
+  const floorPlanImage = `data:${mimeType};base64,${imageBase64}`;
 
   return {
     title: `Floor Plan: ${description.slice(0, 50)}`,
-    totalArea: `${totalArea} sq ft`,
-    rooms,
-    walls,
-    doors,
-    windows,
-    summary: `Generated ${rooms.length} rooms with ${doors.length} doors and ${windows.length} windows.`,
-    materials: [...new Set(rooms.map(r => `${r.name}: ${r.materials.floor} floor, ${r.materials.wall} walls`))],
-    estimatedCost: `Estimated based on ${totalArea} sq ft`,
+    totalArea: 'See image',
+    rooms: [],
+    walls: [],
+    doors: [],
+    windows: [],
+    summary: `AI-generated floor plan for: ${description}`,
+    materials: [],
+    estimatedCost: 'See image for details',
+    floorPlanImage,
   };
 }
 
@@ -665,7 +627,6 @@ export async function generateFloorPlan(description: string): Promise<FloorPlan>
 export async function analyzeSketch(imageBase64: string, mimeType: string): Promise<FloorPlan> {
   const prompt = `Analyze this hand-drawn floor plan sketch. For each room, output a JSON object on its own line with: id, type, name, points (polygon pixel coordinates, 12px=1ft, snapped to 6px grid), furniture, materials. Start coordinates at x:150, y:150. Return ONLY JSON lines.`;
 
-  const { generateVisionContent } = await import('../gemini');
   const text = await generateVisionContent(prompt, imageBase64, mimeType, SYSTEM_INSTRUCTION);
   const rooms = extractRoomsFromResponse(text);
 
@@ -694,32 +655,26 @@ export async function analyzeSketch(imageBase64: string, mimeType: string): Prom
 // ─── Chat Formatting ─────────────────────────────────────────────────────────
 
 export function formatFloorPlanForChat(plan: FloorPlan): string {
-  const roomList = plan.rooms
-    .map((r) => {
-      const xs = r.points.map(p => p.x);
-      const ys = r.points.map(p => p.y);
-      const w = Math.round((Math.max(...xs) - Math.min(...xs)) / 12);
-      const h = Math.round((Math.max(...ys) - Math.min(...ys)) / 12);
-      return `- ${r.name} -- ${w}' x ${h}' -- ${r.area} sq ft`;
-    })
-    .join('\n');
+  let result = `## ${plan.title}\n\n${plan.summary}`;
 
-  return `## ${plan.title}
+  if (plan.floorPlanImage) {
+    result += `\n\n![Floor Plan](${plan.floorPlanImage})`;
+  }
 
-**Total Area:** ${plan.totalArea}
+  if (plan.rooms.length > 0) {
+    const roomList = plan.rooms
+      .map((r) => {
+        const xs = r.points.map(p => p.x);
+        const ys = r.points.map(p => p.y);
+        const w = Math.round((Math.max(...xs) - Math.min(...xs)) / 12);
+        const h = Math.round((Math.max(...ys) - Math.min(...ys)) / 12);
+        return `- ${r.name} -- ${w}' x ${h}' -- ${r.area} sq ft`;
+      })
+      .join('\n');
+    result += `\n\n### Room Schedule\n\n${roomList}`;
+  }
 
-### Room Schedule
-
-${roomList}
-
-### Layout
-
-- ${plan.doors.length} doors placed at shared walls
-- ${plan.windows.length} windows on exterior walls
-
-### Materials
-
-${plan.materials.map((m) => `- ${m}`).join('\n')}`;
+  return result;
 }
 
 export { generateInsights } from './floorplan-insights';
