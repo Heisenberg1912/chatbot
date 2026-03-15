@@ -1,16 +1,24 @@
 import { generateVisionContent, generateJSON } from '../gemini';
 
-const SYSTEM_INSTRUCTION = `You are an expert construction site analyst and property valuator.
-You analyze construction site images to determine:
-- Construction stage and progress percentage
-- Property/land valuation estimates
-- Timeline analysis and completion estimates
-- Risk assessments and recommendations
-- Material and resource analysis
+const SYSTEM_INSTRUCTION = `You are a senior construction architect and site engineer with 30+ years of field experience across residential, commercial, and infrastructure projects worldwide.
 
-Always respond with detailed, structured analysis. When providing valuations,
-consider location, construction quality, materials visible, and market factors.
-Use geography-first reasoning for accurate local market context.`;
+Your expertise includes:
+- **Construction Phase Identification**: You can precisely identify the exact construction phase from visual cues — foundation/excavation, substructure, superstructure (columns, beams, slabs for each floor), brickwork/blockwork, MEP rough-in, plastering, finishing, handover. You recognize RCC vs steel frame vs load-bearing vs pre-engineered structures instantly.
+- **Structural Analysis**: You identify column spacing, beam depth, slab thickness, reinforcement patterns, formwork quality, concrete grade indicators, curing practices, and structural integrity markers visible in the image.
+- **Material Identification**: You recognize cement brands, steel grades (Fe415/Fe500/Fe550D), brick types (fly ash, AAC, red clay), aggregate quality, sand type (river/M-sand/P-sand), waterproofing membranes, insulation types, and finishing materials with precision.
+- **Construction Quality Assessment**: You spot honeycombing, cold joints, improper cover blocks, rusting reinforcement, poor curing signs, alignment issues, level deviations, and workmanship deficiencies that most engineers miss.
+- **Progress & Timeline**: You estimate percentage completion per trade (civil, MEP, finishing) and overall, identify critical path delays, and predict realistic completion timelines based on visible work pace and resource deployment.
+- **Valuation**: You estimate current market value, replacement cost, and projected completion value using local market knowledge, construction cost indices, and quality multipliers.
+- **Safety & Compliance**: You identify OSHA/IS safety violations, missing PPE, inadequate scaffolding, unsafe excavation practices, fire safety gaps, and NBC/local code non-compliance visible in images.
+
+IMPORTANT ANALYSIS RULES:
+- Be specific, not generic. Say "RCC frame structure at 2nd floor slab casting stage" not "construction in progress"
+- Identify the exact floor/level visible in the image
+- Note specific deficiencies with technical terminology
+- Provide actionable recommendations an engineer can act on immediately
+- When uncertain, state your confidence level and what additional information would help
+- For follow-up questions, use context from previous analysis to give precise, relevant answers
+- Always reason about what you CAN see vs what you're inferring`;
 
 export interface SiteAnalysisResult {
   stage: string;
@@ -39,27 +47,29 @@ export async function analyzeSiteImage(
   location?: string,
   currency?: string
 ): Promise<SiteAnalysisResult> {
-  const prompt = `Analyze this construction site image in detail. ${location ? `Location: ${location}.` : ''} ${currency ? `Use ${currency} for all values.` : 'Use INR for values.'}
+  const prompt = `Analyze this construction site image with the precision of a 30-year veteran architect doing a site inspection. ${location ? `Location: ${location}.` : ''} ${currency ? `Use ${currency} for all values.` : 'Use INR for values.'}
+
+Study every visible detail — structural system, construction phase, material quality, workmanship, safety practices, and progress indicators.
 
 Return a JSON object with this exact structure:
 {
-  "stage": "description of current construction stage",
+  "stage": "Precise construction phase (e.g., 'RCC superstructure - 3rd floor column casting in progress, 2nd floor slab stripped and curing'). Be specific about structure type, floor level, and current activity.",
   "progressPercent": number 0-100,
   "timeline": {
-    "estimated": "total estimated construction time",
-    "remaining": "estimated remaining time",
+    "estimated": "total estimated construction time with reasoning",
+    "remaining": "estimated remaining time based on visible progress pace",
     "completionDate": "estimated completion date"
   },
   "valuation": {
-    "currentValue": "current market value range",
+    "currentValue": "current market value range based on stage and quality",
     "projectedValue": "projected value on completion",
-    "landValue": "estimated land value",
-    "constructionCost": "estimated total construction cost"
+    "landValue": "estimated land value for the visible plot size",
+    "constructionCost": "estimated total construction cost based on visible quality grade"
   },
-  "materials": ["list of visible materials"],
-  "riskFactors": ["identified risks"],
-  "recommendations": ["actionable recommendations"],
-  "quality": "overall quality assessment",
+  "materials": ["Specific materials visible - e.g., 'TMT Fe500D reinforcement bars (likely 12mm and 16mm dia)', 'M25/M30 grade concrete (based on aggregate visible)', 'AAC blocks for partition walls', 'Centering plates and props for formwork'"],
+  "riskFactors": ["Specific technical risks - e.g., 'Inadequate concrete cover on exposed rebar at column junction (< 25mm visible)', 'No curing compound or wet curing observed on recently cast slab', 'Scaffolding without cross-bracing at north elevation'"],
+  "recommendations": ["Actionable engineering recommendations - e.g., 'Apply curing compound within 24hrs on freshly cast slab to prevent shrinkage cracks', 'Install safety nets at slab edge before proceeding to next floor', 'Verify column verticality with plumb bob - slight lean visible at grid C3'"],
+  "quality": "Detailed quality assessment covering workmanship, material grade, and finish level (economy/standard/premium)",
   "confidence": number 0-100
 }
 
@@ -92,30 +102,41 @@ Format as a detailed report.`;
 }
 
 export function formatAnalysisForChat(result: SiteAnalysisResult): string {
-  return `## Site Analysis Results
+  const progressBar = '█'.repeat(Math.round(result.progressPercent / 5)) + '░'.repeat(20 - Math.round(result.progressPercent / 5));
 
-**Stage:** ${result.stage}
-**Progress:** ${result.progressPercent}%
-**Quality:** ${result.quality}
-**Confidence:** ${result.confidence}%
+  return `## Site Inspection Report
 
-### Timeline
-- Estimated total: ${result.timeline.estimated}
-- Remaining: ${result.timeline.remaining}
-- Expected completion: ${result.timeline.completionDate}
+### Construction Phase
+**${result.stage}**
 
-### Valuation
-- Current value: ${result.valuation.currentValue}
-- Projected value: ${result.valuation.projectedValue}
-- Land value: ${result.valuation.landValue}
-- Construction cost: ${result.valuation.constructionCost}
+**Overall Progress:** ${progressBar} **${result.progressPercent}%**
+**Quality Grade:** ${result.quality}
+**Analysis Confidence:** ${result.confidence}%
 
-### Materials Identified
+---
+
+### Timeline Assessment
+- **Total estimated duration:** ${result.timeline.estimated}
+- **Time remaining:** ${result.timeline.remaining}
+- **Expected completion:** ${result.timeline.completionDate}
+
+### Valuation Summary
+| Parameter | Estimate |
+|-----------|----------|
+| Current market value | ${result.valuation.currentValue} |
+| Projected value (on completion) | ${result.valuation.projectedValue} |
+| Land value | ${result.valuation.landValue} |
+| Total construction cost | ${result.valuation.constructionCost} |
+
+### Materials Identified on Site
 ${result.materials.map((m) => `- ${m}`).join('\n')}
 
-### Risk Factors
+### Risk Factors & Deficiencies
 ${result.riskFactors.map((r) => `- ${r}`).join('\n')}
 
 ### Recommendations
-${result.recommendations.map((r) => `- ${r}`).join('\n')}`;
+${result.recommendations.map((r) => `- ${r}`).join('\n')}
+
+---
+*Ask follow-up questions about any aspect of this analysis — structural details, cost breakdowns, material alternatives, or next construction steps.*`;
 }

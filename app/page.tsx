@@ -12,7 +12,6 @@ import {
   Map,
   Package,
   MessageSquare,
-  Loader2,
   User,
   ChevronDown,
   LogIn,
@@ -440,23 +439,30 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Modules */}
-        <div className="px-4 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2">Capabilities</p>
-          <div className="space-y-1">
-            {MODULES.map((mod) => (
-              <button
-                key={mod.id}
-                onClick={() => setSelectedModule(mod.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
-                  selectedModule === mod.id
-                    ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium'
-                    : 'text-gray-600 dark:text-content-muted hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-content'
-                }`}
+        {/* Products */}
+        <div className="px-4 py-2 overflow-y-auto">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2">Products</p>
+          <div className="space-y-0.5">
+            {[
+              { name: 'Floor Plan Generator + MEP & 3D Views', href: 'https://www.builtattic.com/pages/vitruviai' },
+              { name: 'Client Leads in your City', href: 'https://www.builtattic.com/pages/faust' },
+              { name: 'Construction Management', href: 'https://matters-prod.vercel.app/' },
+              { name: 'Shop Architectural Plans', href: 'https://www.builtattic.com/collections/design-studio' },
+              { name: 'Hardware & Resource Calculator', href: 'https://www.builtattic.com/pages/vision' },
+              { name: 'Hire an Architect', href: 'https://www.builtattic.com/collections/individuals' },
+              { name: 'Property Valuation Calculator', href: 'https://www.builtattic.com/pages/valuator' },
+              { name: 'Material Supplier in your City', href: 'https://www.builtattic.com/pages/material-studio' },
+              { name: 'Timeline & Progress Calculator', href: 'https://www.builtattic.com/pages/summaries-construction-analysis-tool' },
+            ].map((item) => (
+              <a
+                key={item.name}
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block px-3 py-2 rounded-xl text-[13px] text-gray-600 dark:text-content-muted hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-content transition-all leading-snug"
               >
-                <mod.icon size={16} />
-                {mod.name}
-              </button>
+                {item.name}
+              </a>
             ))}
           </div>
         </div>
@@ -813,18 +819,19 @@ export default function Home() {
                 </div>
               ))}
               
-              {/* Loading Indicator */}
+              {/* Loading Indicator - Logo Animation */}
               {isLoading && (
-                <div className="flex gap-4 animate-slide-up">
-                  <div className="w-8 h-8 rounded-full bg-gray-900 dark:bg-white text-white dark:text-surface flex items-center justify-center shrink-0 mt-1 shadow-sm animate-pulse-slow">
-                    <Sparkles size={16} className="text-white dark:text-surface fill-white/20 dark:fill-surface" />
+                <div className="flex gap-4 animate-slide-up items-center">
+                  <div className="shrink-0 mt-1">
+                    <svg className="logo-loading-container" width="36" height="36" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                      <rect width="32" height="32" rx="8" className="fill-gray-900 dark:fill-white/10"/>
+                      <path d="M8 24V12l8-6 8 6v12H8z" fill="none" className="stroke-gray-400 dark:stroke-white/60 logo-loading-house" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <rect x="13" y="18" width="6" height="6" className="fill-gray-400 dark:fill-white/50 logo-loading-door" rx="1"/>
+                      <circle cx="16" cy="14" r="2" className="fill-gray-500 dark:fill-white/70 logo-loading-window"/>
+                    </svg>
                   </div>
-                  <div className="pt-3 px-2">
-                    <div className="flex gap-1.5 items-center h-6">
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
-                      <span className="typing-dot" />
-                    </div>
+                  <div className="pt-1 px-1">
+                    <span className="text-sm text-gray-500 dark:text-content-muted animate-pulse">Analyzing...</span>
                   </div>
                 </div>
               )}
@@ -917,7 +924,11 @@ export default function Home() {
                 disabled={isLoading || (!input.trim() && !imageBase64)}
                 className="p-3 mb-0.5 rounded-full bg-gray-900 dark:bg-white text-white dark:text-surface hover:bg-gray-800 dark:hover:bg-gray-200 disabled:opacity-30 disabled:hover:bg-gray-900 dark:disabled:hover:bg-white transition-all shrink-0 shadow-sm"
               >
-                {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-0.5" />}
+                {isLoading ? (
+                  <svg className="logo-spinner" width="20" height="20" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 24V12l8-6 8 6v12H8z" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                ) : <Send size={20} className="ml-0.5" />}
               </button>
             </div>
           </div>

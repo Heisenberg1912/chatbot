@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateChat, generateVisionContent, generateText } from '@/lib/gemini';
+import { IChatMessage } from '@/lib/models';
 import { connectDB } from '@/lib/mongodb';
 import { ChatSession, Usage, Media } from '@/lib/models';
 import { getCurrentUser } from '@/lib/auth';
@@ -93,7 +94,8 @@ async function handleModuleRequest(
   image?: string,
   imageMimeType?: string,
   location?: string,
-  currency?: string
+  currency?: string,
+  chatHistory?: Array<{ role: string; content: string }>
 ): Promise<{ response: string; metadata?: Record<string, unknown> }> {
   switch (module) {
     case 'site-analyzer': {
@@ -115,27 +117,52 @@ async function handleModuleRequest(
           return { response: text };
         }
       }
-      const text = await generateText(
-        `${SYSTEM_PROMPT}\n\nUser question about site analysis: ${message}`,
-        SYSTEM_PROMPT
-      );
-      return { response: text };
-    }
-
-    case 'floorplan': {
-      try {
-        const plan = await generateFloorPlan(message);
-        return {
-          response: formatFloorPlanForChat(plan),
-          metadata: { type: 'floorplan', data: plan },
-        };
-      } catch {
-        const text = await generateText(
-          `Generate a textual floor plan description for: ${message}`,
+      // Follow-up question: use chat history for context
+      if (chatHistory && chatHistory.length > 0) {
+        const historyParts = chatHistory.map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        }));
+        const text = await generateChat(
+          historyParts,
+          message,
           SYSTEM_PROMPT
         );
         return { response: text };
       }
+      const text = await generateText(message, SYSTEM_PROMPT);
+      return { response: text };
+    }
+
+    case 'floorplan': {
+      // Check if this is a follow-up question (not a new floor plan request)
+      const isFloorPlanRequest = /generate|create|design|make|draw|build|plan for|layout for|bhk|bedroom|bathroom/i.test(message);
+      if (isFloorPlanRequest) {
+        try {
+          const plan = await generateFloorPlan(message);
+          return {
+            response: formatFloorPlanForChat(plan),
+            metadata: { type: 'floorplan', data: plan },
+          };
+        } catch {
+          const text = await generateText(
+            `Generate a textual floor plan description for: ${message}`,
+            SYSTEM_PROMPT
+          );
+          return { response: text };
+        }
+      }
+      // Follow-up question about a previous floor plan
+      if (chatHistory && chatHistory.length > 0) {
+        const historyParts = chatHistory.map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        }));
+        const text = await generateChat(historyParts, message, SYSTEM_PROMPT);
+        return { response: text };
+      }
+      const floorText = await generateText(message, SYSTEM_PROMPT);
+      return { response: floorText };
     }
 
     case 'masterplan': {
@@ -150,16 +177,24 @@ async function handleModuleRequest(
             metadata: { type: 'masterplan', data: analysis },
           };
         } catch {
-          const text = await generateText(message, SYSTEM_PROMPT);
-          return { response: text };
+          // Fall through to chat with history
         }
       }
-      const text = await generateText(message, SYSTEM_PROMPT);
-      return { response: text };
+      // Follow-up or general masterplan question
+      if (chatHistory && chatHistory.length > 0) {
+        const historyParts = chatHistory.map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        }));
+        const text = await generateChat(historyParts, message, SYSTEM_PROMPT);
+        return { response: text };
+      }
+      const mpText = await generateText(message, SYSTEM_PROMPT);
+      return { response: mpText };
     }
 
     case 'materials': {
-      // Try supplier DB search first, fallback to AI recommendation
+      // Try supplier DB search first
       try {
         const supplierMatch = message.match(
           /supplier|vendor|find|search|list/i
@@ -189,10 +224,20 @@ async function handleModuleRequest(
           }
         }
       } catch {
-        // DB unavailable, fall through to AI recommendation
+        // DB unavailable, fall through
       }
 
-      // Material recommendation via AI
+      // Follow-up question about materials
+      if (chatHistory && chatHistory.length > 0) {
+        const historyParts = chatHistory.map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        }));
+        const text = await generateChat(historyParts, message, SYSTEM_PROMPT);
+        return { response: text };
+      }
+
+      // Fresh material recommendation
       const text = await recommendMaterials(
         message,
         'General',
@@ -202,6 +247,14 @@ async function handleModuleRequest(
     }
 
     default: {
+      if (chatHistory && chatHistory.length > 0) {
+        const historyParts = chatHistory.map((h) => ({
+          role: h.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: h.content }],
+        }));
+        const text = await generateChat(historyParts, message, SYSTEM_PROMPT);
+        return { response: text };
+      }
       const text = await generateText(message, SYSTEM_PROMPT);
       return { response: text };
     }
@@ -272,6 +325,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Fetch chat history for follow-up context
+    let chatHistory: Array<{ role: string; content: string }> = [];
+    try {
+      const existingSession = await ChatSession.findOne({ sessionId }).lean();
+      if (existingSession?.messages?.length) {
+        chatHistory = (existingSession.messages as IChatMessage[])
+          .slice(-10) // Last 10 messages for context
+          .map((m) => ({ role: m.role, content: m.content }));
+      }
+    } catch {
+      // Continue without history
+    }
+
     // Process the request
     const { response, metadata } = await handleModuleRequest(
       module,
@@ -279,7 +345,8 @@ export async function POST(req: NextRequest) {
       image,
       imageMimeType,
       location,
-      currency
+      currency,
+      chatHistory
     );
 
     // Save to chat history

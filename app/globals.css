@@ -200,3 +200,46 @@ textarea::-webkit-scrollbar {
 }
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }
 .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+/* Logo loading animation */
+@keyframes logo-draw {
+  0% { stroke-dashoffset: 100; opacity: 0.3; }
+  50% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: -100; opacity: 0.3; }
+}
+@keyframes logo-fill-pulse {
+  0%, 100% { opacity: 0.1; transform: scale(0.9); }
+  50% { opacity: 0.6; transform: scale(1); }
+}
+@keyframes logo-dot-ping {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+@keyframes logo-container-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+.logo-loading-house {
+  stroke-dasharray: 100;
+  animation: logo-draw 2s ease-in-out infinite;
+}
+.logo-loading-door {
+  animation: logo-fill-pulse 2s ease-in-out infinite;
+  transform-origin: center;
+}
+.logo-loading-window {
+  animation: logo-dot-ping 2s ease-in-out infinite 0.3s;
+  transform-origin: center;
+}
+.logo-loading-container {
+  animation: logo-container-pulse 2s ease-in-out infinite;
+}
+
+/* Small logo spinner for send button */
+@keyframes logo-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.logo-spinner {
+  animation: logo-spin 1.2s linear infinite;
+}
