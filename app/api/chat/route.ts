@@ -302,6 +302,7 @@ export async function POST(req: NextRequest) {
             sessionId,
             title: (message || 'Image Analysis').slice(0, 50),
             module,
+            ...(currentUser && { userId: currentUser._id.toString() }),
           },
         },
         { upsert: true, new: true }

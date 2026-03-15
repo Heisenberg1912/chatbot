@@ -107,14 +107,42 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const loadSessions = useCallback(() => {
+    fetch('/api/sessions')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.sessions?.length > 0) {
+          setSessions((prev) => {
+            const localIds = new Set(prev.map((s) => s.id));
+            const dbSessions = data.sessions
+              .filter((s: ChatSession) => !localIds.has(s.id))
+              .map((s: ChatSession) => ({
+                ...s,
+                createdAt: new Date(s.createdAt),
+                messages: s.messages.map((m: Message) => ({
+                  ...m,
+                  id: m.id || uuidv4(),
+                  timestamp: new Date(m.timestamp),
+                })),
+              }));
+            return [...prev, ...dbSessions];
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetch('/api/auth/me')
       .then((r) => r.json())
       .then((data) => {
-        if (data.user) setUser(data.user);
+        if (data.user) {
+          setUser(data.user);
+          loadSessions();
+        }
       })
       .catch(() => {});
-  }, []);
+  }, [loadSessions]);
 
   // Fetch usage info for current module
   const fetchUsage = useCallback(() => {
@@ -315,6 +343,14 @@ export default function Home() {
     if (activeSessionId === id) {
       setActiveSessionId('');
     }
+    // Delete from backend for logged-in users
+    if (user) {
+      fetch('/api/sessions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: id }),
+      }).catch(() => {});
+    }
   };
 
   const handleAuth = async (action: 'login' | 'register', data: Record<string, string>) => {
@@ -327,6 +363,7 @@ export default function Home() {
     if (result.user) {
       setUser(result.user);
       setShowAuthModal(false);
+      loadSessions();
     }
     return result;
   };
