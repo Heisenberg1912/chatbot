@@ -175,8 +175,8 @@ export default function MediaGallery({ isOpen, onClose, localMediaItems, isLogge
 
       {/* Sliding Panel */}
       <div
-        className={`fixed top-0 left-0 h-full w-[340px] bg-gray-50 dark:bg-surface-light border-r border-gray-200 dark:border-white/10 z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed top-0 right-0 h-full w-[340px] bg-gray-50 dark:bg-surface-light border-l border-gray-200 dark:border-white/10 z-50 transform transition-transform duration-300 ease-in-out flex flex-col ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Header */}

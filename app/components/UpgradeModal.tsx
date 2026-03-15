@@ -117,7 +117,7 @@ export default function UpgradeModal({ onClose, currentPlan = 'free' }: Props) {
         <div className="px-6 pb-5 pt-1">
           <p className="text-xs text-gray-400 dark:text-content-subtle text-center">
             {isPro
-              ? 'You have unlimited access to all BuildBot features.'
+              ? 'You have unlimited access to all Builtattic features.'
               : 'Contact our team to upgrade your plan. Pro access will be activated within 24 hours.'}
           </p>
         </div>
