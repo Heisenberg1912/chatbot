@@ -193,6 +193,29 @@ const MasterplanSchema = new Schema<IMasterplan>(
   { timestamps: true }
 );
 
+// ─── Media Model ───
+export interface IMedia extends Document {
+  userId: string;
+  src: string;
+  title: string;
+  module: string;
+  saved: boolean;
+  createdAt: Date;
+}
+
+const MediaSchema = new Schema<IMedia>(
+  {
+    userId: { type: String, required: true, index: true },
+    src: { type: String, required: true },
+    title: { type: String, required: true },
+    module: { type: String, required: true },
+    saved: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+
+MediaSchema.index({ userId: 1, createdAt: -1 });
+
 // ─── Export Models ───
 export const User = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
 export const Usage = mongoose.models.Usage || mongoose.model<IUsage>('Usage', UsageSchema);
@@ -202,3 +225,5 @@ export const Supplier =
   mongoose.models.Supplier || mongoose.model<ISupplier>('Supplier', SupplierSchema);
 export const Masterplan =
   mongoose.models.Masterplan || mongoose.model<IMasterplan>('Masterplan', MasterplanSchema);
+export const Media =
+  mongoose.models.Media || mongoose.model<IMedia>('Media', MediaSchema);

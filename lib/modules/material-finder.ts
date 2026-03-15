@@ -39,16 +39,19 @@ export interface SupplierSearchParams {
 export async function searchSuppliers(params: SupplierSearchParams) {
   await connectDB();
 
+  // Escape special regex chars to prevent ReDoS
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   const filter: Record<string, unknown> = {};
   if (params.country) filter.country = params.country;
-  if (params.city) filter.city = new RegExp(params.city, 'i');
-  if (params.category) filter.category = new RegExp(params.category, 'i');
+  if (params.city) filter.city = new RegExp(escapeRegex(params.city), 'i');
+  if (params.category) filter.category = new RegExp(escapeRegex(params.category), 'i');
   if (params.query) {
     filter.$text = { $search: params.query };
   }
 
-  const page = params.page || 1;
-  const limit = params.limit || 20;
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(100, Math.max(1, params.limit || 20));
   const skip = (page - 1) * limit;
 
   const [suppliers, total] = await Promise.all([

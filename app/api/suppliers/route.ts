@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
       city: searchParams.get('city') || undefined,
       category: searchParams.get('category') || undefined,
       query: searchParams.get('q') || undefined,
-      page: parseInt(searchParams.get('page') || '1'),
-      limit: parseInt(searchParams.get('limit') || '20'),
+      page: Math.max(1, parseInt(searchParams.get('page') || '1') || 1),
+      limit: Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20)),
     });
 
     return NextResponse.json(result);

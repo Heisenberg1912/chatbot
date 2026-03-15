@@ -21,13 +21,15 @@ import {
   Sparkles,
   History,
   Sun,
-  Moon
+  Moon,
+  Image as ImageIcon
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import FloorPlanViewer from './components/FloorPlanViewer';
 import AuthModal from './components/AuthModal';
 import UpgradeModal from './components/UpgradeModal';
 import ChatMarkdown from './components/ChatMarkdown';
+import MediaGallery from './components/MediaGallery';
 
 interface Message {
   id: string;
@@ -82,6 +84,7 @@ export default function Home() {
   const [usageInfo, setUsageInfo] = useState<{ freeUsed: number; freeLimit: number; remaining: number; paid: boolean } | null>(null);
   const [moduleMenuOpen, setModuleMenuOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [showGallery, setShowGallery] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -160,6 +163,19 @@ export default function Home() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image too large. Maximum size is 5MB.');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      alert('Unsupported format. Use JPEG, PNG, WebP, or GIF.');
+      return;
+    }
 
     setImageMimeType(file.type);
     const reader = new FileReader();
@@ -322,6 +338,44 @@ export default function Home() {
 
   const currentModule = MODULES.find((m) => m.id === selectedModule)!;
 
+  // Collect all generated media from chat sessions
+  const mediaItems = sessions.flatMap((session) =>
+    session.messages
+      .filter((msg) => {
+        if (msg.role !== 'assistant') return false;
+        // Floor plan images
+        if (msg.metadata?.type === 'floorplan') {
+          const data = msg.metadata.data as Record<string, unknown>;
+          return !!data?.floorPlanImage;
+        }
+        // Any assistant message with embedded images in content
+        if (msg.content?.includes('data:image/')) return true;
+        return false;
+      })
+      .map((msg) => {
+        if (msg.metadata?.type === 'floorplan') {
+          const data = msg.metadata.data as Record<string, unknown>;
+          return {
+            id: msg.id,
+            src: data.floorPlanImage as string,
+            title: (data.title as string) || 'Floor Plan',
+            module: 'Floor Plans',
+            timestamp: msg.timestamp,
+          };
+        }
+        // Extract data:image from content
+        const match = msg.content.match(/data:image\/[^)"\s]+/);
+        return {
+          id: msg.id,
+          src: match?.[0] || '',
+          title: session.title,
+          module: MODULES.find((m) => m.id === msg.module)?.name || 'General',
+          timestamp: msg.timestamp,
+        };
+      })
+      .filter((item) => item.src)
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-white dark:bg-surface text-gray-900 dark:text-content font-sans selection:bg-gray-200 dark:selection:bg-white/20 selection:text-black dark:selection:text-white transition-colors duration-300">
       {/* Sidebar */}
@@ -396,63 +450,130 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Media Gallery Button */}
+        <div className="px-4 py-2 border-t border-gray-200 dark:border-white/5">
+          <button
+            onClick={() => setShowGallery(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-600 dark:text-content-muted hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-content transition-all"
+          >
+            <ImageIcon size={16} />
+            <span>My Media</span>
+            {mediaItems.length > 0 && (
+              <span className="ml-auto text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-content-muted">
+                {mediaItems.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* User Profile */}
         <div className="p-4 mt-auto border-t border-gray-200 dark:border-white/5">
           {user ? (
-            <div className="space-y-3 px-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-surface-lighter flex items-center justify-center text-sm font-semibold text-gray-900 dark:text-white shadow-sm border border-gray-300 dark:border-white/10">
-                    {user.name[0].toUpperCase()}
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-900 dark:text-content truncate max-w-[120px]">{user.name}</span>
-                    <button
-                      onClick={() => setShowUpgradeModal(true)}
-                      className={`text-[11px] font-semibold px-1.5 py-0.5 rounded w-fit mt-0.5 transition-colors ${
-                        user.subscription?.plan === 'pro' || user.subscription?.plan === 'enterprise'
-                          ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                          : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-content-muted hover:bg-gray-200 dark:hover:bg-white/10'
-                      }`}
-                    >
-                      {(user.subscription?.plan || 'free').toUpperCase()}
-                    </button>
-                  </div>
+            <div className="space-y-3">
+              {/* User info row */}
+              <div className="flex items-center gap-3 px-1">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold shadow-sm shrink-0 ${
+                  user.subscription?.plan === 'pro' || user.subscription?.plan === 'enterprise'
+                    ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white border border-amber-300 dark:border-amber-500/50'
+                    : 'bg-gray-200 dark:bg-surface-lighter text-gray-900 dark:text-white border border-gray-300 dark:border-white/10'
+                }`}>
+                  {user.name[0].toUpperCase()}
                 </div>
-                <button onClick={handleLogout} className="text-gray-500 dark:text-content-muted hover:text-gray-900 dark:hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5">
-                  <LogOut size={16} />
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-sm font-medium text-gray-900 dark:text-content truncate">{user.name}</span>
+                  <span className="text-[11px] text-gray-500 dark:text-content-muted truncate">{user.email}</span>
+                </div>
+                <button onClick={handleLogout} className="text-gray-400 dark:text-content-subtle hover:text-gray-900 dark:hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5" title="Sign out">
+                  <LogOut size={15} />
                 </button>
               </div>
-              {/* Usage indicator for free users */}
-              {usageInfo && !usageInfo.paid && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-gray-500 dark:text-content-muted">{currentModule.name}</span>
-                    <span className="text-gray-500 dark:text-content-muted">{usageInfo.freeUsed}/{usageInfo.freeLimit}</span>
+
+              {/* Plan card */}
+              {usageInfo?.paid ? (
+                /* Pro user card */
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="w-full rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border border-amber-200 dark:border-amber-500/20 p-3 text-left transition-all hover:border-amber-300 dark:hover:border-amber-500/30 group"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles size={13} className="text-amber-500" />
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Pro Plan</span>
+                    </div>
+                    <span className="text-[10px] text-amber-600/60 dark:text-amber-400/50 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">View plan</span>
                   </div>
-                  <div className="h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        usageInfo.freeUsed >= usageInfo.freeLimit
-                          ? 'bg-red-500'
-                          : usageInfo.freeUsed >= usageInfo.freeLimit - 1
-                          ? 'bg-amber-500'
-                          : 'bg-gray-400 dark:bg-white/30'
-                      }`}
-                      style={{ width: `${Math.min(100, (usageInfo.freeUsed / usageInfo.freeLimit) * 100)}%` }}
-                    />
+                  <div className="flex items-center gap-1.5 text-[12px] text-amber-800/70 dark:text-amber-300/70">
+                    <span>Unlimited access</span>
+                    <span className="text-amber-400 dark:text-amber-500/50">|</span>
+                    <span>{currentModule.name}</span>
                   </div>
+                </button>
+              ) : (
+                /* Free user card with usage */
+                <div className="rounded-xl bg-gray-50 dark:bg-surface border border-gray-200 dark:border-white/5 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-content-muted">Free Plan</span>
+                    </div>
+                    <button
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/25 transition-colors"
+                    >
+                      Upgrade
+                    </button>
+                  </div>
+
+                  {usageInfo && (
+                    <>
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-gray-600 dark:text-content-muted">{currentModule.name}</span>
+                        <span className={`font-medium ${
+                          usageInfo.freeUsed >= usageInfo.freeLimit
+                            ? 'text-red-500'
+                            : usageInfo.freeUsed >= usageInfo.freeLimit - 1
+                            ? 'text-amber-500'
+                            : 'text-gray-500 dark:text-content-muted'
+                        }`}>
+                          {usageInfo.remaining > 0
+                            ? `${usageInfo.remaining} left`
+                            : 'Limit reached'}
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-gray-200 dark:bg-white/5 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ease-out ${
+                            usageInfo.freeUsed >= usageInfo.freeLimit
+                              ? 'bg-red-500'
+                              : usageInfo.freeUsed >= usageInfo.freeLimit - 1
+                              ? 'bg-amber-500'
+                              : 'bg-blue-500 dark:bg-blue-400'
+                          }`}
+                          style={{ width: `${Math.min(100, (usageInfo.freeUsed / usageInfo.freeLimit) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-400 dark:text-content-subtle">
+                        <span>{usageInfo.freeUsed} used</span>
+                        <span>{usageInfo.freeLimit} total</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-900 dark:text-white transition-colors text-sm font-medium"
-            >
-              <LogIn size={16} />
-              Sign in
-            </button>
+            /* Not logged in */
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 dark:bg-white text-white dark:text-surface hover:bg-gray-800 dark:hover:bg-gray-200 transition-colors text-sm font-medium shadow-sm"
+              >
+                <LogIn size={16} />
+                Sign in
+              </button>
+              <p className="text-[10px] text-center text-gray-400 dark:text-content-subtle">
+                Sign in to save history & unlock more features
+              </p>
+            </div>
           )}
         </div>
       </aside>
@@ -748,8 +869,16 @@ export default function Home() {
 
       {/* Upgrade Modal */}
       {showUpgradeModal && (
-        <UpgradeModal onClose={() => setShowUpgradeModal(false)} />
+        <UpgradeModal onClose={() => setShowUpgradeModal(false)} currentPlan={user?.subscription?.plan || 'free'} />
       )}
+
+      {/* Media Gallery */}
+      <MediaGallery
+        isOpen={showGallery}
+        onClose={() => setShowGallery(false)}
+        localMediaItems={mediaItems}
+        isLoggedIn={!!user}
+      />
     </div>
   );
 }

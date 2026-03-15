@@ -61,7 +61,10 @@ export async function generateVisionContent(
   const imagePart: Part = {
     inlineData: { data: imageBase64, mimeType },
   };
-  const result = await model.generateContent([prompt, imagePart]);
+  const result = await withTimeout(
+    model.generateContent([prompt, imagePart]),
+    45000
+  );
   return result.response.text();
 }
 
@@ -89,7 +92,11 @@ export async function generateChat(
 export async function generateJSON<T>(prompt: string, systemInstruction?: string): Promise<T> {
   const text = await generateText(prompt, systemInstruction);
   const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-  return JSON.parse(cleaned) as T;
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    throw new Error(`Failed to parse AI response as JSON: ${cleaned.slice(0, 200)}`);
+  }
 }
 
 export async function generateImage(
@@ -106,7 +113,7 @@ export async function generateImage(
     },
   });
 
-  const result = await model.generateContent(prompt);
+  const result = await withTimeout(model.generateContent(prompt), 50000);
   const response = result.response;
   const candidates = response.candidates;
 
@@ -114,11 +121,16 @@ export async function generateImage(
     throw new Error('No response from image model');
   }
 
+  const parts = candidates[0]?.content?.parts;
+  if (!parts || parts.length === 0) {
+    throw new Error('Empty response from image model');
+  }
+
   let imageBase64 = '';
   let mimeType = 'image/png';
   let text = '';
 
-  for (const part of candidates[0].content.parts) {
+  for (const part of parts) {
     if (part.inlineData) {
       imageBase64 = part.inlineData.data;
       mimeType = part.inlineData.mimeType || 'image/png';

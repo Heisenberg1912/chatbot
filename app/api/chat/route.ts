@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateChat, generateVisionContent, generateText } from '@/lib/gemini';
 import { connectDB } from '@/lib/mongodb';
-import { ChatSession, Usage } from '@/lib/models';
+import { ChatSession, Usage, Media } from '@/lib/models';
 import { getCurrentUser } from '@/lib/auth';
 import { analyzeSiteImage, formatAnalysisForChat } from '@/lib/modules/site-analyzer';
 import { generateFloorPlan, formatFloorPlanForChat } from '@/lib/modules/floorplan-generator';
@@ -217,6 +217,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message or image is required' }, { status: 400 });
     }
 
+    // Validate image if provided
+    if (image) {
+      const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+      if (imageMimeType && !ALLOWED_MIME_TYPES.includes(imageMimeType)) {
+        return NextResponse.json({ error: 'Unsupported image format. Use JPEG, PNG, WebP, or GIF.' }, { status: 400 });
+      }
+      // Reject images larger than 5MB (base64 is ~33% larger than raw)
+      const MAX_BASE64_SIZE = 7 * 1024 * 1024; // ~5MB raw
+      if (image.length > MAX_BASE64_SIZE) {
+        return NextResponse.json({ error: 'Image too large. Maximum size is 5MB.' }, { status: 400 });
+      }
+    }
+
     // Detect which module to use
     const module = body.module || detectModule(message || '', !!image);
 
@@ -295,6 +308,33 @@ export async function POST(req: NextRequest) {
       );
     } catch (dbErr) {
       console.warn('Failed to save chat history:', dbErr);
+    }
+
+    // Auto-save generated media for logged-in users
+    if (currentUser) {
+      try {
+        if (metadata?.type === 'floorplan') {
+          const planData = metadata.data as Record<string, unknown>;
+          if (planData?.floorPlanImage) {
+            await Media.create({
+              userId: currentUser._id.toString(),
+              src: planData.floorPlanImage as string,
+              title: (planData.title as string) || `Floor Plan: ${(message || '').slice(0, 40)}`,
+              module: 'Floor Plans',
+            });
+          }
+        } else if (image && module === 'site-analyzer') {
+          // Save uploaded site analysis images
+          await Media.create({
+            userId: currentUser._id.toString(),
+            src: `data:${imageMimeType || 'image/jpeg'};base64,${image}`,
+            title: `Site Analysis: ${(message || 'Image').slice(0, 40)}`,
+            module: 'Site Analyzer',
+          });
+        }
+      } catch (mediaErr) {
+        console.warn('Failed to auto-save media:', mediaErr);
+      }
     }
 
     // Increment usage for free users

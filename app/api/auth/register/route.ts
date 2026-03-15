@@ -14,6 +14,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+    }
+
+    // Validate password strength
+    if (password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
+    }
+
+    // Validate name length
+    if (name.trim().length < 2 || name.trim().length > 50) {
+      return NextResponse.json({ error: 'Name must be between 2 and 50 characters' }, { status: 400 });
+    }
+
     await connectDB();
 
     const existing = await User.findOne({ email: email.toLowerCase() });

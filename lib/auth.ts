@@ -4,7 +4,10 @@ import { cookies } from 'next/headers';
 import { connectDB } from './mongodb';
 import { User } from './models';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+const JWT_SECRET: string = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 export async function hashPassword(password: string): Promise<string> {
@@ -45,7 +48,7 @@ export async function setAuthCookie(token: string) {
   cookieStore.set('auth-token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60,
     path: '/',
   });
