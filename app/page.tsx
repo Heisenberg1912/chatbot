@@ -57,6 +57,8 @@ const MODULES = [
   { id: 'materials', name: 'Material Finder', icon: Package, color: '#e4e4e7', description: 'Find suppliers & get material recommendations' },
 ];
 
+const SUBSCRIPTION_URL = 'https://www.builtattic.com/products/subscription?variant=47204727128299';
+
 const QUICK_ACTIONS = [
   { label: 'Analyze a construction site from an image', module: 'site-analyzer', prompt: '' },
   { label: 'Generate a modern 3BHK floor plan layout', module: 'floorplan', prompt: 'Generate a modern 3BHK apartment floor plan with 1200 sq ft, 2 bathrooms, open kitchen, and a balcony' },
@@ -271,12 +273,18 @@ export default function Home() {
 
       const data = await res.json();
 
-      // Handle limit reached
+      // Handle auth required
+      if (data.requiresAuth) {
+        setShowAuthModal(true);
+        return;
+      }
+
+      // Handle limit reached - redirect to subscription page
       if (data.limitReached) {
         const limitMessage: Message = {
           id: uuidv4(),
           role: 'assistant',
-          content: data.error,
+          content: 'You\'ve used all your free messages for this module. Upgrade to Pro for unlimited access.',
           module: data.module,
           metadata: { type: 'limit-reached' },
           timestamp: new Date(),
@@ -289,6 +297,7 @@ export default function Home() {
           )
         );
         fetchUsage();
+        window.open(SUBSCRIPTION_URL, '_blank');
         return;
       }
 
@@ -552,12 +561,14 @@ export default function Home() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-content-muted">Free Plan</span>
                     </div>
-                    <button
-                      onClick={() => setShowUpgradeModal(true)}
+                    <a
+                      href={SUBSCRIPTION_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-500/25 transition-colors"
                     >
                       Upgrade
-                    </button>
+                    </a>
                   </div>
 
                   {usageInfo && (
@@ -764,12 +775,14 @@ export default function Home() {
                       {msg.role === 'assistant' && msg.metadata?.type === 'limit-reached' ? (
                         <div className="space-y-3">
                           <p className="text-sm text-gray-600 dark:text-content-muted">{msg.content}</p>
-                          <button
-                            onClick={() => setShowUpgradeModal(true)}
-                            className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition-colors shadow-sm"
+                          <a
+                            href={SUBSCRIPTION_URL}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition-colors shadow-sm"
                           >
                             Upgrade to Pro
-                          </button>
+                          </a>
                         </div>
                       ) : msg.role === 'assistant' ? (
                         <ChatMarkdown content={msg.content} />
@@ -825,6 +838,26 @@ export default function Home() {
 
         {/* Input Area */}
         <div className="relative z-20 pb-6 px-4 pt-2 w-full max-w-3xl mx-auto">
+          {/* Limit reached banner - blocks input */}
+          {usageInfo && !usageInfo.paid && usageInfo.remaining <= 0 ? (
+            <div className="rounded-[28px] bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-500/10 dark:to-orange-500/10 border border-amber-200 dark:border-amber-500/20 p-5 text-center space-y-3">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                You&apos;ve used all {usageInfo.freeLimit} free messages for {currentModule.name}.
+              </p>
+              <a
+                href={SUBSCRIPTION_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-5 py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold transition-colors shadow-sm"
+              >
+                Upgrade to Pro for Unlimited Access
+              </a>
+              <p className="text-[11px] text-amber-600/60 dark:text-amber-400/40">
+                Switch to another module to continue using your free messages
+              </p>
+            </div>
+          ) : (
+          <>
           {/* Image Preview inside input area top */}
           {imagePreview && (
             <div className="absolute -top-16 left-8 bg-white dark:bg-surface-lighter p-1.5 rounded-xl border border-gray-200 dark:border-white/10 shadow-2xl animate-fade-in z-30">
@@ -860,7 +893,7 @@ export default function Home() {
               >
                 <ImagePlus size={22} />
               </button>
-              
+
               <textarea
                 ref={inputRef}
                 value={input}
@@ -881,7 +914,7 @@ export default function Home() {
                 className="flex-1 bg-transparent border-none outline-none resize-none py-3.5 text-[15px] max-h-[200px] text-gray-900 dark:text-content placeholder:text-gray-500 dark:placeholder:text-content-muted font-normal"
                 style={{ minHeight: '52px' }}
               />
-              
+
               <button
                 onClick={() => sendMessage()}
                 disabled={isLoading || (!input.trim() && !imageBase64)}
@@ -896,6 +929,8 @@ export default function Home() {
               Built on intelligence. Verify critical outputs.
             </span>
           </div>
+          </>
+          )}
         </div>
       </main>
 

@@ -248,7 +248,17 @@ export async function POST(req: NextRequest) {
       isNotExpired;
 
     if (!isActivePro) {
-      const usageKey = currentUser ? currentUser._id.toString() : sessionId;
+      if (!currentUser) {
+        return NextResponse.json(
+          {
+            error: 'Please sign in to continue using BuildBot AI.',
+            requiresAuth: true,
+            module,
+          },
+          { status: 401 }
+        );
+      }
+      const usageKey = currentUser._id.toString();
       const usage = await Usage.findOne({ key: usageKey, module });
       if (usage && usage.freeUsed >= FREE_LIMIT) {
         return NextResponse.json(
@@ -339,9 +349,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Increment usage for free users
-    if (!isActivePro) {
+    if (!isActivePro && currentUser) {
       try {
-        const usageKey = currentUser ? currentUser._id.toString() : sessionId;
+        const usageKey = currentUser._id.toString();
         await Usage.findOneAndUpdate(
           { key: usageKey, module },
           { $inc: { freeUsed: 1 } },
