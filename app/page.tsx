@@ -92,6 +92,18 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingMessageRef = useRef<{ message: string; module?: string } | null>(null);
 
+  // Helper for authenticated API calls (sends token via header for cross-origin iframe support)
+  const authFetch = useCallback((url: string, options?: RequestInit) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth-token') : null;
+    const headers: Record<string, string> = {
+      ...(options?.headers as Record<string, string> || {}),
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { ...options, headers, credentials: 'include' });
+  }, []);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
 
@@ -110,7 +122,7 @@ export default function Home() {
   }, [messages]);
 
   const loadSessions = useCallback(() => {
-    fetch('/api/sessions')
+    authFetch('/api/sessions')
       .then((r) => r.json())
       .then((data) => {
         if (data.sessions?.length > 0) {
@@ -132,10 +144,10 @@ export default function Home() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [authFetch]);
 
   useEffect(() => {
-    fetch('/api/auth/me')
+    authFetch('/api/auth/me')
       .then((r) => r.json())
       .then((data) => {
         if (data.user) {
@@ -144,19 +156,19 @@ export default function Home() {
         }
       })
       .catch(() => {});
-  }, [loadSessions]);
+  }, [loadSessions, authFetch]);
 
   // Fetch usage info for current module
   const fetchUsage = useCallback(() => {
     const key = user?.email || activeSessionId || '';
     if (!key && !user) return;
-    fetch(`/api/usage?module=${selectedModule}${!user ? `&key=${key}` : ''}`)
+    authFetch(`/api/usage?module=${selectedModule}${!user ? `&key=${key}` : ''}`)
       .then((r) => r.json())
       .then((data) => {
         if (!data.error) setUsageInfo(data);
       })
       .catch(() => {});
-  }, [user, selectedModule, activeSessionId]);
+  }, [user, selectedModule, activeSessionId, authFetch]);
 
   useEffect(() => {
     fetchUsage();
@@ -259,7 +271,7 @@ export default function Home() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/chat', {
+      const res = await authFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -355,7 +367,7 @@ export default function Home() {
     }
     // Delete from backend for logged-in users
     if (user) {
-      fetch('/api/sessions', {
+      authFetch('/api/sessions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: id }),
@@ -368,9 +380,14 @@ export default function Home() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
+      credentials: 'include',
     });
     const result = await res.json();
     if (result.user) {
+      // Store token for cross-origin iframe auth (cookies may be blocked)
+      if (result.token) {
+        localStorage.setItem('auth-token', result.token);
+      }
       setUser(result.user);
       setShowAuthModal(false);
       loadSessions();
@@ -386,7 +403,8 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await authFetch('/api/auth/logout', { method: 'POST' });
+    localStorage.removeItem('auth-token');
     setUser(null);
     setUsageInfo(null);
     setSessions([]);
@@ -970,6 +988,7 @@ export default function Home() {
         onClose={() => setShowGallery(false)}
         localMediaItems={mediaItems}
         isLoggedIn={!!user}
+        authFetch={authFetch}
       />
     </div>
   );

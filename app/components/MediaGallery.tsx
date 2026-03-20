@@ -18,9 +18,11 @@ interface MediaGalleryProps {
   onClose: () => void;
   localMediaItems: MediaItem[];
   isLoggedIn: boolean;
+  authFetch?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
-export default function MediaGallery({ isOpen, onClose, localMediaItems, isLoggedIn }: MediaGalleryProps) {
+export default function MediaGallery({ isOpen, onClose, localMediaItems, isLoggedIn, authFetch: authFetchProp }: MediaGalleryProps) {
+  const doFetch = authFetchProp || fetch;
   const [activeTab, setActiveTab] = useState<'created' | 'saved'>('created');
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [dbMedia, setDbMedia] = useState<MediaItem[]>([]);
@@ -30,7 +32,7 @@ export default function MediaGallery({ isOpen, onClose, localMediaItems, isLogge
     if (!isLoggedIn) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/media?tab=${tab}`);
+      const res = await doFetch(`/api/media?tab=${tab}`);
       const data = await res.json();
       if (data.media) {
         setDbMedia(data.media.map((m: Record<string, unknown>) => ({
@@ -78,7 +80,7 @@ export default function MediaGallery({ isOpen, onClose, localMediaItems, isLogge
     e.stopPropagation();
     if (!isLoggedIn || !item._id) return;
     try {
-      await fetch('/api/media', {
+      await doFetch('/api/media', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item._id, saved: !item.saved }),
@@ -91,7 +93,7 @@ export default function MediaGallery({ isOpen, onClose, localMediaItems, isLogge
     e.stopPropagation();
     if (!isLoggedIn || !item._id) return;
     try {
-      await fetch(`/api/media?id=${item._id}`, { method: 'DELETE' });
+      await doFetch(`/api/media?id=${item._id}`, { method: 'DELETE' });
       fetchMedia(activeTab);
       if (previewItem?.id === item.id) setPreviewItem(null);
     } catch { /* ignore */ }

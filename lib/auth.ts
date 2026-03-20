@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { connectDB } from './mongodb';
 import { User } from './models';
 
@@ -31,8 +31,18 @@ export function verifyToken(token: string): { userId: string; email: string; rol
 }
 
 export async function getCurrentUser() {
+  // Try cookie first, then Authorization header (for cross-origin iframe contexts)
   const cookieStore = await cookies();
-  const token = cookieStore.get('auth-token')?.value;
+  let token = cookieStore.get('auth-token')?.value;
+
+  if (!token) {
+    const headerStore = await headers();
+    const authHeader = headerStore.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    }
+  }
+
   if (!token) return null;
 
   const decoded = verifyToken(token);
@@ -47,8 +57,8 @@ export async function setAuthCookie(token: string) {
   const cookieStore = await cookies();
   cookieStore.set('auth-token', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: true,
+    sameSite: 'none',
     maxAge: 7 * 24 * 60 * 60,
     path: '/',
   });
