@@ -84,7 +84,7 @@ export default function AuthModal({ onClose, onAuth }: Props) {
               value={form.password}
               onChange={(e) => updateField('password', e.target.value)}
               required
-              minLength={6}
+              minLength={8}
               className="w-full px-3 py-2 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-300 dark:border-white/10 text-sm outline-none focus:border-blue-500 text-gray-900 dark:text-content placeholder-gray-400 dark:placeholder-content-muted transition-colors"
             />
           </div>

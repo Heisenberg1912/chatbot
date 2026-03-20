@@ -90,6 +90,7 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const pendingMessageRef = useRef<{ message: string; module?: string } | null>(null);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const messages = activeSession?.messages || [];
@@ -274,6 +275,7 @@ export default function Home() {
 
       // Handle auth required
       if (data.requiresAuth) {
+        pendingMessageRef.current = { message: msg, module: overrideModule };
         setShowAuthModal(true);
         return;
       }
@@ -372,6 +374,13 @@ export default function Home() {
       setUser(result.user);
       setShowAuthModal(false);
       loadSessions();
+      fetchUsage();
+      // Re-send the message that triggered the auth modal
+      const pending = pendingMessageRef.current;
+      if (pending) {
+        pendingMessageRef.current = null;
+        setTimeout(() => sendMessage(pending.message, pending.module), 300);
+      }
     }
     return result;
   };
@@ -379,6 +388,9 @@ export default function Home() {
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
+    setUsageInfo(null);
+    setSessions([]);
+    setActiveSessionId('');
   };
 
   const currentModule = MODULES.find((m) => m.id === selectedModule)!;
