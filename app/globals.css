@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #09090b;
-  --bg-secondary: #18181b;
-  --bg-tertiary: #27272a;
+  --bg-primary: #000000;
+  --bg-secondary: #050505;
+  --bg-tertiary: #0a0a0a;
   --text-primary: #ffffff;
-  --text-secondary: #a1a1aa;
+  --text-secondary: #dbdbdb;
 }
 
 * {
@@ -44,7 +44,7 @@ textarea::-webkit-scrollbar {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(110deg, #ffffff 0%, #d4d4d8 25%, #71717a 50%, #d4d4d8 75%, #ffffff 100%);
+  background-image: linear-gradient(110deg, #c6da9c 0%, #ffffff 25%, #b2c4ca 50%, #ffffff 75%, #c6da9c 100%);
   background-size: 200% auto;
   animation: shimmer 6s linear infinite;
 }
@@ -59,7 +59,7 @@ textarea::-webkit-scrollbar {
   line-height: 1.6;
   color: #374151;
 }
-.dark .chat-markdown { color: #d4d4d8; }
+.dark .chat-markdown { color: #dbdbdb; }
 
 .chat-markdown h1,
 .chat-markdown h2,
@@ -96,13 +96,13 @@ textarea::-webkit-scrollbar {
 }
 
 .chat-markdown li::marker { color: #9ca3af; }
-.dark .chat-markdown li::marker { color: #71717a; }
+.dark .chat-markdown li::marker { color: #dbdbdb; }
 
 .chat-markdown strong { color: #111827; font-weight: 600; }
 .dark .chat-markdown strong { color: #ffffff; }
 
 .chat-markdown em { color: #6b7280; font-style: italic; }
-.dark .chat-markdown em { color: #a1a1aa; }
+.dark .chat-markdown em { color: #dbdbdb; }
 
 .chat-markdown code {
   background: rgba(0, 0, 0, 0.06);
@@ -139,7 +139,7 @@ textarea::-webkit-scrollbar {
 .chat-markdown a { color: #1f2937; text-decoration: underline; text-underline-offset: 4px; transition: color 0.2s; }
 .dark .chat-markdown a { color: #ffffff; }
 .chat-markdown a:hover { color: #6b7280; }
-.dark .chat-markdown a:hover { color: #d4d4d8; }
+.dark .chat-markdown a:hover { color: #dbdbdb; }
 
 .chat-markdown blockquote {
   border-left: 3px solid #d1d5db;
@@ -153,8 +153,8 @@ textarea::-webkit-scrollbar {
   padding-bottom: 0.5rem;
 }
 .dark .chat-markdown blockquote {
-  border-left-color: #71717a;
-  color: #a1a1aa;
+  border-left-color: #dbdbdb;
+  color: #dbdbdb;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
 }
 

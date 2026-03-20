@@ -14,6 +14,7 @@ import {
   MessageSquare,
   User,
   ChevronDown,
+  ChevronRight,
   LogIn,
   LogOut,
   Trash2,
@@ -70,7 +71,8 @@ export default function Home() {
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [productsOpen, setProductsOpen] = useState(false);
   const [selectedModule, setSelectedModule] = useState('general');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -470,9 +472,15 @@ export default function Home() {
         </div>
 
         {/* Products */}
-        <div className="px-4 py-2 overflow-y-auto">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2">Products</p>
-          <div className="space-y-0.5">
+        <div className="px-4 py-2 flex flex-col shrink-0">
+          <button 
+            onClick={() => setProductsOpen(!productsOpen)}
+            className="w-full flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-content-subtle mb-3 px-2 hover:text-gray-900 dark:hover:text-white transition-colors cursor-pointer"
+          >
+            <span>Products</span>
+            {productsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+          <div className={`space-y-0.5 overflow-hidden transition-all duration-300 ${productsOpen ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'}`}>
             {[
               { name: 'Floor Plan Generator + MEP & 3D Views', href: 'https://www.builtattic.com/pages/vitruviai' },
               { name: 'Client Leads in your City', href: 'https://www.builtattic.com/pages/faust' },

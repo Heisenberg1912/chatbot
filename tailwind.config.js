@@ -9,8 +9,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        surface: { DEFAULT: '#09090b', light: '#18181b', lighter: '#27272a' },
-        content: { DEFAULT: '#ffffff', muted: '#a1a1aa', subtle: '#71717a' },
+        brand: {
+          green: '#c6da9c',
+          blue: '#b2c4ca',
+          gray: '#dbdbdb',
+        },
+        surface: { DEFAULT: '#000000', light: '#050505', lighter: '#0a0a0a' },
+        content: { DEFAULT: '#ffffff', muted: '#dbdbdb', subtle: '#b2c4ca' },
       },
       backgroundImage: {
         'brand-glow': 'radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 50%), radial-gradient(circle at top right, rgba(255, 255, 255, 0.02), transparent 50%)',
